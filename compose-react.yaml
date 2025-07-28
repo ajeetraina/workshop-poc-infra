@@ -64,7 +64,7 @@ services:
     labels:
       - demo-setup=true
 
-  # VS Code workspace (unchanged)
+  # VS Code workspace - CHANGED PORT TO 8086
   workspace:
     image: michaelirwin244/workshop-poc:workspace
     command: /home/coder/project
@@ -72,7 +72,7 @@ services:
       project-setup:
         condition: service_completed_successfully
     ports:
-      - 8085:8085 # For the IDE itself
+      - 8086:8085 # Changed from 8085:8085 to 8086:8085
       - 3000:3000 # For the application running in the IDE
     environment:
       TESTCONTAINERS_HOST_OVERRIDE: localhost
