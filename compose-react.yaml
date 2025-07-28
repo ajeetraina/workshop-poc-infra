@@ -23,6 +23,8 @@ services:
       - demo-setup=true
     environment:
       - NODE_ENV=production
+    networks:
+      - workshop-poc-react
 
   # Express Backend with swappable file system adapters
   backend:
@@ -47,12 +49,14 @@ services:
     restart: unless-stopped
     labels:
       - demo-setup=true
+    networks:
+      - workshop-poc-react
 
   # Legacy instructions server (for backward compatibility)
   instructions:
     image: michaelirwin244/workshop-poc:markdown-server
     ports:
-      - 8001:3000
+      - "8001:3000"
     volumes:
       - project:/project
     environment:
@@ -63,8 +67,10 @@ services:
         condition: service_completed_successfully
     labels:
       - demo-setup=true
+    networks:
+      - workshop-poc-react
 
-  # VS Code workspace - CHANGED PORT TO 8086
+  # VS Code workspace - Fixed port mapping and networking
   workspace:
     image: michaelirwin244/workshop-poc:workspace
     command: /home/coder/project
@@ -72,8 +78,8 @@ services:
       project-setup:
         condition: service_completed_successfully
     ports:
-      - 8086:8085 # Changed from 8085:8085 to 8086:8085
-      - 3000:3000 # For the application running in the IDE
+      - "8085:8085"  # Changed back to 8085:8085 for consistency
+      - "3000:3000"  # For the application running in the IDE
     environment:
       TESTCONTAINERS_HOST_OVERRIDE: localhost
     volumes:
@@ -86,8 +92,10 @@ services:
           subpath: workspace
     labels:
       - demo-setup=true
+    networks:
+      - workshop-poc-react
 
-  # Host port forwarding (unchanged)
+  # Host port forwarding - Fixed to ensure proper network connectivity
   host-forwarding:
     image: michaelirwin244/workshop-poc:host-port-republisher
     volumes:
@@ -100,8 +108,9 @@ services:
       - socket-proxy
     labels:
       - demo-setup=true
+    restart: unless-stopped
 
-  # Workspace cleaner (unchanged)
+  # Workspace cleaner - Fixed with proper restart policy
   workspace-cleaner:
     image: michaelirwin244/workshop-poc:workspace-cleaner
     volumes:
@@ -112,8 +121,11 @@ services:
       - socket-proxy
     labels:
       - demo-setup=true
+    networks:
+      - workshop-poc-react
+    restart: unless-stopped
 
-  # Socket proxy (unchanged)
+  # Socket proxy - Enhanced configuration for better stability
   socket-proxy:
     image: mikesir87/docker-socket-proxy
     volumes:
@@ -158,14 +170,23 @@ services:
       LISTEN_SOCKET_PATH: /tmp/proxy/docker.sock
     labels:
       - demo-setup=true
+    networks:
+      - workshop-poc-react
+    restart: unless-stopped
 
 volumes:
   socket-proxy:
     name: socket-proxy
+    labels:
+      - demo-setup=true
   project:
     name: project
+    labels:
+      - demo-setup=true
 
 networks:
   workshop-poc-react:
     name: workshop-poc-react
+    labels:
+      - demo-setup=true
 
