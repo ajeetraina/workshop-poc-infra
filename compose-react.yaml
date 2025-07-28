@@ -70,7 +70,7 @@ services:
     networks:
       - workshop-poc-react
 
-  # VS Code workspace - Fixed port mapping and networking
+  # VS Code workspace - REMOVED from explicit network due to host-forwarding sharing
   workspace:
     image: michaelirwin244/workshop-poc:workspace
     command: /home/coder/project
@@ -78,8 +78,8 @@ services:
       project-setup:
         condition: service_completed_successfully
     ports:
-      - "8085:8085"  # Changed back to 8085:8085 for consistency
-      - "3000:3000"  # For the application running in the IDE
+      - "8085:8085"
+      - "3000:3000"
     environment:
       TESTCONTAINERS_HOST_OVERRIDE: localhost
     volumes:
@@ -92,10 +92,9 @@ services:
           subpath: workspace
     labels:
       - demo-setup=true
-    networks:
-      - workshop-poc-react
+    # REMOVED networks section - inherits network through host-forwarding
 
-  # Host port forwarding - Fixed to ensure proper network connectivity
+  # Host port forwarding - shares network namespace with workspace
   host-forwarding:
     image: michaelirwin244/workshop-poc:host-port-republisher
     volumes:
@@ -110,9 +109,11 @@ services:
       - demo-setup=true
     restart: unless-stopped
 
-  # Workspace cleaner - Fixed with proper restart policy
+  # Workspace cleaner - FORCE REBUILD to get package.json fix
   workspace-cleaner:
-    image: michaelirwin244/workshop-poc:workspace-cleaner
+    build:
+      context: ./support/workspace-cleaner
+      dockerfile: Dockerfile
     volumes:
       - socket-proxy:/var/run
     environment:
