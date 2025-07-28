@@ -1,0 +1,171 @@
+services:
+  # Project setup (unchanged)
+  project-setup:
+    image: michaelirwin244/workshop-poc:setup
+    volumes:
+      - project:/project
+    environment:
+      PROJECT_CLONE_URL: https://github.com/mikesir87/workshop-poc-content
+
+  # React Frontend
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: react-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+      - workspace
+    restart: unless-stopped
+    labels:
+      - demo-setup=true
+    environment:
+      - NODE_ENV=production
+
+  # Express Backend with swappable file system adapters
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: express-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - project:/project
+      - socket-proxy:/var/run
+      - /var/run/docker.sock:/var/run/docker.sock  # For container adapter
+    environment:
+      - NODE_ENV=production
+      - WORKSPACE_ROOT=/project/workspace
+      - TARGET_CONTAINER=workspace
+      - CONTENT_DIR=/project/docs
+    depends_on:
+      project-setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    labels:
+      - demo-setup=true
+
+  # Legacy instructions server (for backward compatibility)
+  instructions:
+    image: michaelirwin244/workshop-poc:markdown-server
+    ports:
+      - 8001:3000
+    volumes:
+      - project:/project
+    environment:
+      ROOT_DIR: /project/docs
+      SITE_TITLE: Workshop POC
+    depends_on:
+      project-setup:
+        condition: service_completed_successfully
+    labels:
+      - demo-setup=true
+
+  # VS Code workspace (unchanged)
+  workspace:
+    image: michaelirwin244/workshop-poc:workspace
+    command: /home/coder/project
+    depends_on:
+      project-setup:
+        condition: service_completed_successfully
+    ports:
+      - 8085:8085 # For the IDE itself
+      - 3000:3000 # For the application running in the IDE
+    environment:
+      TESTCONTAINERS_HOST_OVERRIDE: localhost
+    volumes:
+      - socket-proxy:/var/run
+      - type: volume
+        source: project
+        target: /home/coder/project
+        volume:
+          nocopy: true
+          subpath: workspace
+    labels:
+      - demo-setup=true
+
+  # Host port forwarding (unchanged)
+  host-forwarding:
+    image: michaelirwin244/workshop-poc:host-port-republisher
+    volumes:
+      - socket-proxy:/var/run
+    network_mode: service:workspace
+    environment:
+      LABEL_FILTER: demo-setup=true
+    depends_on:
+      - workspace
+      - socket-proxy
+    labels:
+      - demo-setup=true
+
+  # Workspace cleaner (unchanged)
+  workspace-cleaner:
+    image: michaelirwin244/workshop-poc:workspace-cleaner
+    volumes:
+      - socket-proxy:/var/run
+    environment:
+      LABEL_FILTER: demo-setup=true
+    depends_on:
+      - socket-proxy
+    labels:
+      - demo-setup=true
+
+  # Socket proxy (unchanged)
+  socket-proxy:
+    image: mikesir87/docker-socket-proxy
+    volumes:
+      - socket-proxy:/tmp/proxy
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      DEBUG_LOGS: "true"
+      CONFIG_DATA: |
+        mutators:
+          # Remap the project directory to the project volume, since the project
+          # is running out of a volume.
+          - type: mountPath
+            from: /home/coder/project
+            to: project/workspace
+
+          # If requests to use the Docker Socket are used (such as Testcontainers),
+          # use the proxied one to ensure permissions, remappings, etc. are applied
+          - type: mountPath
+            from: /var/run/docker.sock
+            to: socket-proxy/docker.sock
+
+          # Add labels to all newly created objects
+          - type: addLabels
+            labels:
+              demo-setup: "true"
+
+          - type: addToNetwork
+            networks:
+              - workshop-poc-react
+        gates:
+          - type: mountSource
+            allowedSources:
+              - project
+              - socket-proxy
+              - buildx_buildkit_default_state
+
+        responseFilters:
+          # Only return objects with the labels we mutated on
+          - type: labelFilter
+            requiredLabels:
+              demo-setup: "true"
+      LISTEN_SOCKET_PATH: /tmp/proxy/docker.sock
+    labels:
+      - demo-setup=true
+
+volumes:
+  socket-proxy:
+    name: socket-proxy
+  project:
+    name: project
+
+networks:
+  workshop-poc-react:
+    name: workshop-poc-react
+
