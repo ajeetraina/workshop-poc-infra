@@ -1,274 +1,211 @@
 # Workshop PoC - React Conversion
 
-This branch contains a React-based conversion of the original HTML workshop environment, featuring a modern frontend with swappable backend adapters for flexible file system navigation.
+This is an enhanced version of the workshop PoC that includes a React frontend and Express backend, providing a more modern web application architecture for Docker workshops.
 
-## 🚀 New Features
+![Screenshot of the project opened in the browser using VS Code server](./screenshot.png)
 
-### Frontend Improvements
-- **React-based Interface**: Modern, component-based architecture
-- **Vite Build System**: Fast development and optimized production builds  
-- **Responsive Design**: Works on desktop, tablet, and mobile devices
-- **Split Panel Layout**: Resizable panels with file explorer toggle
-- **Interactive Tutorial**: Step tracking, progress indication, and command copying
+## Architecture
 
-### Backend Architecture
-- **Swappable Adapters**: Switch between different file system backends
-- **Express.js API**: RESTful endpoints for file operations
-- **Multiple Backend Types**:
-  - **Local**: Direct file system access within the workspace
-  - **Remote**: Simulated remote file system (WebDAV/SSH/FTP)
-  - **Container**: Direct Docker container file system access
+The project uses a combination of containers to create an isolated environment with the following services:
 
-### Enhanced Functionality
-- **File Explorer**: Browse files with different backend adapters
-- **Command Copying**: One-click copy of tutorial commands
-- **Real-time Updates**: Dynamic content loading and updates
-- **Health Monitoring**: Service health checks and status indicators
+- **React Frontend** - A modern React application served via Nginx
+- **Express Backend** - An API server with swappable file system adapters
+- **VS Code Server** - Browser-based IDE using [coder/code-server](https://github.com/coder/code-server)
+- **Setup container** - Clones the workshop repo into a shared volume
+- **[Docker Socket Proxy](https://github.com/mikesir87/docker-socket-proxy)** - Provides security and isolation for Docker operations
+- **Host Port Forwarder** - Enables localhost port forwarding within the workspace
+- **Instructions Server** - Markdown rendering server for workshop documentation
+- **Workspace Cleaner** - Manages cleanup of workshop resources
 
-## 📁 Project Structure
-
-```
-workshop-poc-infra/
-├── frontend/                    # React frontend
-│   ├── src/
-│   │   ├── components/         # React components
-│   │   ├── data/              # Tutorial data
-│   │   └── App.jsx            # Main application
-│   ├── Dockerfile             # Frontend container
-│   ├── nginx.conf            # Nginx configuration
-│   └── package.json          # Frontend dependencies
-│
-├── backend/                     # Express.js backend
-│   ├── adapters/              # Swappable file system adapters
-│   │   ├── localFileSystem.js    # Local file access
-│   │   ├── remoteFileSystem.js   # Remote system simulation
-│   │   └── containerFileSystem.js # Docker container access
-│   ├── server.js              # Main server
-│   ├── Dockerfile            # Backend container
-│   └── package.json          # Backend dependencies
-│
-├── compose-react.yaml           # React-based Docker Compose
-└── README-REACT.md            # This file
-```
-
-## 🛠 Setup and Installation
+## Quick Start
 
 ### Prerequisites
-- Docker & Docker Compose
-- Git
 
-### Quick Start
+- Docker Desktop or Docker Engine
+- Docker Compose v2
+- At least 4GB available RAM
+- Ports 8080, 8000, 8001, 8085, and 3000 available
 
-1. **Clone and switch to React branch**:
+### Using the Automated Script (Recommended)
+
+1. Clone this repository:
    ```bash
    git clone https://github.com/ajeetraina/workshop-poc-infra.git
    cd workshop-poc-infra
    git checkout react-conversion
    ```
 
-2. **Start the React-based environment**:
+2. Make the script executable and run it:
+   ```bash
+   chmod +x restart-workshop.sh
+   ./restart-workshop.sh
+   ```
+
+   This script will:
+   - Clean up any existing resources
+   - Check for port conflicts
+   - Build and start all services
+   - Provide health checks and service URLs
+
+### Manual Setup
+
+If you prefer to start the services manually:
+
+1. Clone this repository and switch to the react-conversion branch:
+   ```bash
+   git clone https://github.com/ajeetraina/workshop-poc-infra.git
+   cd workshop-poc-infra
+   git checkout react-conversion
+   ```
+
+2. Clean up any existing containers (optional but recommended):
+   ```bash
+   docker compose -f compose-react.yaml down --remove-orphans
+   ```
+
+3. Start the stack:
    ```bash
    docker compose -f compose-react.yaml up -d
    ```
 
-3. **Access the application**:
-   - **Main Interface**: http://localhost:8080
-   - **VS Code Environment**: http://localhost:8085
-   - **Backend API**: http://localhost:8000/api/health
-   - **Legacy Instructions**: http://localhost:8001 (for compatibility)
+4. Wait for all services to start (about 30-60 seconds)
 
-### Development Mode
+## Service URLs
 
-For frontend development:
-```bash
-cd frontend
-npm install
-npm run dev
-```
+Once running, you can access:
 
-For backend development:
-```bash
-cd backend
-npm install
-npm run dev
-```
+- **React Frontend**: http://localhost:8080
+- **Backend API**: http://localhost:8000 
+- **Workshop Instructions**: http://localhost:8001
+- **VS Code Server**: http://localhost:8085 (password: `password`)
 
-## 🔄 Backend Adapters
+## Troubleshooting
 
-### Local File System Adapter
-- **Purpose**: Direct access to workspace files
-- **Use Case**: Standard file operations within the container
-- **Configuration**: Set `WORKSPACE_ROOT` environment variable
+### Port Conflicts
 
-### Remote File System Adapter  
-- **Purpose**: Simulate remote file systems (WebDAV, SSH, FTP)
-- **Use Case**: Demo remote file access patterns
-- **Configuration**: Set `REMOTE_HOST`, `REMOTE_PROTOCOL` environment variables
+If you encounter "port already in use" errors:
 
-### Container File System Adapter
-- **Purpose**: Direct Docker container file system access
-- **Use Case**: Inspect files inside running containers
-- **Configuration**: Set `TARGET_CONTAINER` environment variable
-
-### Switching Backends
-
-You can switch backends in two ways:
-
-1. **Frontend UI**: Use the dropdown in the File Explorer
-2. **API Endpoint**: 
+1. Check what's using the ports:
    ```bash
-   curl -X POST http://localhost:8000/api/backend/switch \
-        -H "Content-Type: application/json" \
-        -d '{"backend": "container"}'
+   lsof -i :8080 -i :8000 -i :8001 -i :8085 -i :3000
    ```
 
-## 🔧 Configuration
+2. Stop conflicting services or use the restart script which handles this automatically.
 
-### Environment Variables
+### Networking Issues
 
-#### Frontend
-- `NODE_ENV`: Environment mode (development/production)
+If containers can't communicate:
 
-#### Backend  
-- `NODE_ENV`: Environment mode (development/production)
-- `WORKSPACE_ROOT`: Root directory for local file access
-- `TARGET_CONTAINER`: Container name for container adapter
-- `REMOTE_HOST`: Remote system hostname
-- `REMOTE_PROTOCOL`: Remote system protocol (ssh/ftp/webdav)
-- `CONTENT_DIR`: Directory for markdown content
-
-### Port Configuration
-- `8080`: Frontend (React app via Nginx)
-- `8000`: Backend (Express.js API)
-- `8085`: VS Code Server
-- `8001`: Legacy instructions server
-
-## 🎯 API Endpoints
-
-### File Operations
-- `GET /api/files?path=/&backend=local` - List files
-- `GET /api/files/content?path=/file.txt&backend=local` - Get file content
-- `POST /api/files` - Create file/folder
-- `DELETE /api/files?path=/file.txt&backend=local` - Delete file/folder
-
-### Backend Management
-- `GET /api/backends` - List available backends
-- `POST /api/backend/switch` - Switch backend adapter
-- `GET /api/health` - Health check
-
-### Legacy Compatibility
-- `GET /api/content/:file` - Get markdown content (legacy)
-
-## 🏗 Architecture Comparison
-
-### Original HTML Version
-```
-nginx → Static HTML → Instructions Server (Node.js)
-```
-
-### New React Version
-```
-nginx → React App → Express API → Swappable Adapters
-  ↓                      ↓             ↓
-Frontend              Backend      File Systems
-Components            REST API      (Local/Remote/Container)
-```
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Backend not responding**:
+1. Ensure all services are on the same network:
    ```bash
-   docker compose -f compose-react.yaml logs backend
-   curl http://localhost:8000/api/health
+   docker network ls | grep workshop-poc-react
    ```
 
-2. **File Explorer not loading**:
-   - Check backend service status
-   - Verify API connectivity
-   - Check browser console for errors
+2. Restart the stack:
+   ```bash
+   ./restart-workshop.sh
+   ```
 
-3. **Container adapter fails**:
-   - Ensure Docker socket is accessible
-   - Verify target container is running
-   - Check Docker permissions
+### Module Type Warnings
 
-### Debugging Commands
+The workspace-cleaner warning about MODULE_TYPELESS_PACKAGE_JSON has been fixed in this version.
+
+### Container Cleanup
+
+To clean up all workshop resources:
 
 ```bash
-# Check service health
-docker compose -f compose-react.yaml ps
+# Stop all services
+docker compose -f compose-react.yaml down --remove-orphans
 
-# View logs
-docker compose -f compose-react.yaml logs -f frontend
-docker compose -f compose-react.yaml logs -f backend
-
-# Test API directly
-curl http://localhost:8000/api/health
-curl http://localhost:8000/api/backends
-
-# Restart services
-docker compose -f compose-react.yaml restart frontend backend
+# Remove labeled containers, volumes, and networks
+docker ps -aq --filter "label=demo-setup=true" | xargs -r docker rm -f
+docker volume ls -q --filter "label=demo-setup=true" | xargs -r docker volume rm -f  
+docker network ls -q --filter "label=demo-setup=true" | xargs -r docker network rm
 ```
 
-## 🔄 Migration from Original
+## Workshop Usage
 
-### Differences from Original HTML Version
+### Test the Environment
 
-1. **Frontend**: React components vs static HTML
-2. **Backend**: Express.js with adapters vs simple markdown server
-3. **File Explorer**: Dynamic file browsing vs static content
-4. **Configuration**: New compose file vs original compose.yaml
+1. Open VS Code Server at http://localhost:8085 (password: `password`)
 
-### Backward Compatibility
+2. Open a terminal in VS Code (Menu → Terminal → New Terminal)
 
-- Legacy instructions server still available on port 8001
-- VS Code environment unchanged
-- Original compose.yaml still functional
-- Same workspace structure and volumes
+3. Run `docker ps` to see isolated container view
 
-## 🚀 Future Enhancements
+4. Start a test application:
+   ```bash
+   docker compose up -d
+   ```
 
-### Planned Features
-- [ ] File editing within the File Explorer
-- [ ] Real-time file watching and updates
-- [ ] SSH/SFTP adapter implementation
-- [ ] WebDAV adapter implementation
-- [ ] Advanced search and filtering
-- [ ] File upload/download functionality
-- [ ] Collaborative editing features
+5. Test Testcontainers integration:
+   ```bash
+   npm run integration-test
+   ```
 
-### Extension Points
-- Additional backend adapters
-- Custom file viewers
-- Plugin system for tutorials
-- Integration with cloud storage
-- Enhanced VS Code integration
+### Experiment with Volume Remapping
 
-## 🤝 Contributing
+1. In the VS Code terminal, mount a local directory:
+   ```bash
+   docker run --rm -tiv ./dev/db:/data --name=data-demo ubuntu
+   ```
 
-1. Create feature branch from `react-conversion`
-2. Make changes in appropriate directories
-3. Test with Docker Compose
-4. Submit pull request
+2. Check the mount source:
+   ```bash
+   docker inspect --format='{{range .Mounts}}{{println .Type .Name .Source .Destination}}{{end}}' data-demo
+   ```
 
-### Development Guidelines
-- Use ESLint for code formatting
-- Add tests for new adapters
-- Update documentation
-- Follow React best practices
-- Maintain backward compatibility
+### Experiment with Docker Socket Remapping
 
----
+1. Start a container with Docker socket access:
+   ```bash
+   docker run --rm -tiv /var/run/docker.sock:/var/run/docker.sock --name=socket-demo docker sh
+   ```
 
-## Original Workshop Features
+2. Inside the container, run `docker ps` to see the isolated view
 
-All original workshop features remain available:
-- VS Code environment
-- Docker socket proxy
-- Host port forwarding
-- Isolated environment
-- Tutorial content
+## Development
 
-The React conversion enhances these features with a modern interface and extensible backend architecture.
+### Building Custom Images
+
+To build and test local changes:
+
+```bash
+docker compose -f compose-react.yaml build
+docker compose -f compose-react.yaml up -d
+```
+
+### Debugging
+
+View logs for all services:
+```bash
+docker compose -f compose-react.yaml logs -f
+```
+
+View logs for a specific service:
+```bash
+docker compose -f compose-react.yaml logs -f [service-name]
+```
+
+## Known Limitations
+
+- Running multiple instances will cause port conflicts
+- Volume names are currently hard-coded for security/isolation
+- Some Docker features may be limited due to the socket proxy
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines and how to contribute to this project.
+
+## Changes from Original
+
+This React conversion includes:
+
+- ✅ Modern React frontend with Express backend
+- ✅ Fixed networking issues and port conflicts  
+- ✅ Resolved MODULE_TYPELESS_PACKAGE_JSON warnings
+- ✅ Added automated cleanup and restart script
+- ✅ Enhanced error handling and stability
+- ✅ Better resource labeling for cleanup
+- ✅ Comprehensive troubleshooting documentation
