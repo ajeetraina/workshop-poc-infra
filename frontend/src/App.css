@@ -1,0 +1,30 @@
+.app {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.split {
+  display: flex;
+  height: 100vh;
+}
+
+.split > .gutter {
+  background-color: #e0e0e0;
+  cursor: col-resize;
+  transition: background-color 0.2s;
+}
+
+.split > .gutter:hover {
+  background-color: #007bff;
+}
+
+@media (max-width: 768px) {
+  .split {
+    flex-direction: column !important;
+  }
+  
+  .split > .gutter {
+    cursor: row-resize;
+  }
+}
