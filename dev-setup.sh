@@ -102,30 +102,45 @@ echo ""
 echo "🐳 Setting up Docker environment..."
 
 # Create networks and volumes if they don't exist
-docker network create workshop-poc-react 2>/dev/null || echo "Network workshop-poc-react already exists"
-docker volume create socket-proxy 2>/dev/null || echo "Volume socket-proxy already exists"  
-docker volume create project 2>/dev/null || echo "Volume project already exists"
+docker network create workshop-poc-react 2>/dev/null || echo "✅ Network workshop-poc-react already exists"
+docker volume create socket-proxy 2>/dev/null || echo "✅ Volume socket-proxy already exists"  
+docker volume create project 2>/dev/null || echo "✅ Volume project already exists"
 
 # Pull required images (only the ones that exist)
-echo "📥 Pulling Docker images..."
-docker compose -f compose-react.yaml pull --ignore-pull-failures 2>/dev/null || echo "Some images may need to be built"
+echo "📥 Pulling base Docker images..."
+docker pull node:18-alpine 2>/dev/null || echo "⚠️  Could not pull node:18-alpine (will build from scratch)"
+docker pull nginx:alpine 2>/dev/null || echo "⚠️  Could not pull nginx:alpine (will build from scratch)"
 
 echo "✅ Docker setup complete"
 echo ""
 
-# Build the custom images
-echo "🔨 Building custom Docker images..."
+# Build the custom images separately to avoid build context issues
+echo "🔨 Building Docker images..."
 echo "This may take a few minutes on first run..."
 
-docker compose -f compose-react.yaml build
+# Build backend first (usually faster)
+echo "🔨 Building backend image..."
+if ! docker build -t workshop-poc-backend:latest ./backend; then
+    echo "❌ Backend build failed. Trying with no cache..."
+    docker build --no-cache -t workshop-poc-backend:latest ./backend
+fi
+echo "✅ Backend image built successfully"
 
-echo "✅ Docker images built successfully"
+# Build frontend (takes longer due to npm install and build)
+echo "🔨 Building frontend image..."
+if ! docker build -t workshop-poc-frontend:latest ./frontend; then
+    echo "❌ Frontend build failed. Trying with no cache..."
+    docker build --no-cache -t workshop-poc-frontend:latest ./frontend
+fi
+echo "✅ Frontend image built successfully"
+
+echo "✅ All Docker images built successfully"
 echo ""
 
 # Run a quick test to verify basic functionality
 echo "🧪 Running basic verification tests..."
 
-# Test frontend
+# Test frontend build locally
 if [ -d "frontend" ]; then
     echo "Testing frontend build..."
     cd frontend
@@ -137,19 +152,48 @@ if [ -d "frontend" ]; then
     cd ..
 fi
 
-# Test backend
-if [ -d "backend" ]; then
-    echo "Testing backend startup..."
-    cd backend
-    if timeout 10s npm start > /dev/null 2>&1; then
-        echo "✅ Backend starts successfully"
-    else
-        echo "✅ Backend installation completed (timeout is normal)"
-    fi
-    cd ..
+# Test Docker Compose configuration
+echo "Testing Docker Compose configuration..."
+if docker compose -f compose-react.yaml config > /dev/null 2>&1; then
+    echo "✅ Docker Compose configuration is valid"
+else
+    echo "⚠️  Docker Compose configuration has issues"
 fi
 
 echo "✅ Basic verification complete"
+echo ""
+
+# Optional: Start the environment
+read -p "🚀 Would you like to start the Docker environment now? (y/N): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "🚀 Starting Docker environment..."
+    docker compose -f compose-react.yaml up -d
+    
+    echo ""
+    echo "⏳ Waiting for services to start up..."
+    sleep 10
+    
+    # Check if services are running
+    if curl -s http://localhost:8080/health > /dev/null 2>&1; then
+        echo "✅ Frontend is running at http://localhost:8080"
+    else
+        echo "⚠️  Frontend may still be starting up"
+    fi
+    
+    if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
+        echo "✅ Backend is running at http://localhost:8000"
+    else
+        echo "⚠️  Backend may still be starting up"
+    fi
+    
+    echo ""
+    echo "🎉 Environment is starting up!"
+    echo "💻 Open http://localhost:8080 in your browser"
+    echo "📊 Check status with: docker compose -f compose-react.yaml ps"
+    echo "📝 View logs with: docker compose -f compose-react.yaml logs -f"
+fi
+
 echo ""
 
 # Display usage information
@@ -205,9 +249,6 @@ echo "1. Check Docker is running: docker info"
 echo "2. Check port availability: netstat -tulpn | grep :8080"
 echo "3. Check logs: docker compose -f compose-react.yaml logs"
 echo "4. Reset everything: docker compose -f compose-react.yaml down -v"
-echo ""
-echo "🚀 To get started right now, run:"
-echo "   docker compose -f compose-react.yaml up -d"
-echo "   Then open http://localhost:8080 in your browser!"
+echo "5. Rebuild images: docker compose -f compose-react.yaml build --no-cache"
 echo ""
 echo "🚀 Happy coding!"
