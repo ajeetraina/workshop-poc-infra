@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Workshop PoC Infrastructure - Cleanup and Restart Script
-# This script helps resolve port conflicts and networking issues
+# Workshop PoC Infrastructure - Smart Restart Script
+# This script provides intelligent restart with conflict detection
 
 set -e
 
-echo "🧹 Workshop PoC Infrastructure - Cleanup and Restart"
-echo "=================================================="
+echo "🔄 Workshop PoC Infrastructure - Smart Restart"
+echo "=============================================="
 
 # Function to check if a command exists
 command_exists() {
@@ -26,21 +26,19 @@ fi
 
 echo "✅ Docker and Docker Compose are available"
 
+# Check for existing issues
+echo "🔍 Checking for existing issues..."
+
+# Check if any workshop containers are stuck
+STUCK_CONTAINERS=$(docker ps -aq --filter "label=demo-setup=true" 2>/dev/null || true)
+if [ -n "$STUCK_CONTAINERS" ]; then
+    echo "⚠️  Found existing workshop containers. This might cause conflicts."
+    echo "   Consider using the force-rebuild script for a clean start."
+fi
+
 # Stop any existing containers from the stack
 echo "🛑 Stopping existing containers..."
 docker compose -f compose-react.yaml down --remove-orphans 2>/dev/null || true
-
-# Clean up any containers with demo-setup=true label
-echo "🗑️  Cleaning up labeled containers..."
-docker ps -aq --filter "label=demo-setup=true" | xargs -r docker rm -f 2>/dev/null || true
-
-# Clean up any volumes with demo-setup=true label
-echo "🗑️  Cleaning up labeled volumes..."
-docker volume ls -q --filter "label=demo-setup=true" | xargs -r docker volume rm -f 2>/dev/null || true
-
-# Clean up any networks with demo-setup=true label
-echo "🗑️  Cleaning up labeled networks..."
-docker network ls -q --filter "label=demo-setup=true" | xargs -r docker network rm 2>/dev/null || true
 
 # Check for port conflicts
 echo "🔍 Checking for port conflicts..."
@@ -59,29 +57,43 @@ if [ ${#PORT_CONFLICTS[@]} -gt 0 ]; then
         echo "   - Port $port"
         # Show what's using the port
         if command_exists lsof; then
-            echo "     $(lsof -i :"$port" 2>/dev/null | head -2 | tail -1)"
+            process_info=$(lsof -i :"$port" 2>/dev/null | tail -n +2 | head -1)
+            if [ -n "$process_info" ]; then
+                echo "     Used by: $process_info"
+            fi
         fi
     done
     echo ""
-    echo "💡 You may need to stop these processes or choose different ports."
-    echo "   Do you want to continue anyway? (y/N)"
-    read -r response
-    if [[ ! "$response" =~ ^[Yy]$ ]]; then
-        echo "❌ Aborted by user"
-        exit 1
-    fi
+    echo "🤔 Options:"
+    echo "   1. Continue anyway (y)"
+    echo "   2. Use force-rebuild script for aggressive cleanup (f)"  
+    echo "   3. Exit and manually resolve conflicts (n)"
+    echo ""
+    read -p "Choose an option (y/f/n): " response
+    
+    case "$response" in
+        [Ff]*)
+            echo "🔥 Starting force rebuild..."
+            chmod +x force-rebuild.sh
+            exec ./force-rebuild.sh
+            ;;
+        [Yy]*)
+            echo "⚠️  Continuing with port conflicts..."
+            ;;
+        *)
+            echo "❌ Aborted by user"
+            exit 1
+            ;;
+    esac
 fi
 
-# Build and start the stack
-echo "🏗️  Building images..."
-docker compose -f compose-react.yaml build
-
+# Start with existing images first (faster)
 echo "🚀 Starting the workshop stack..."
 docker compose -f compose-react.yaml up -d
 
 # Wait a moment for containers to initialize
 echo "⏳ Waiting for containers to initialize..."
-sleep 10
+sleep 15
 
 # Check the health of the services
 echo "🏥 Checking service health..."
@@ -89,27 +101,68 @@ echo ""
 
 # Check if containers are running
 SERVICES=(project-setup frontend backend instructions workspace host-forwarding workspace-cleaner socket-proxy)
+FAILED_SERVICES=()
+
 for service in "${SERVICES[@]}"; do
     if docker compose -f compose-react.yaml ps "$service" --status running >/dev/null 2>&1; then
         echo "✅ $service: Running"
+    elif [ "$service" = "project-setup" ] && docker compose -f compose-react.yaml ps "$service" --status exited >/dev/null 2>&1; then
+        echo "✅ $service: Completed (expected)"
     else
         echo "❌ $service: Not running"
+        FAILED_SERVICES+=("$service")
     fi
 done
+
+# If services failed, suggest force rebuild
+if [ ${#FAILED_SERVICES[@]} -gt 0 ]; then
+    echo ""
+    echo "⚠️  Some services failed to start: ${FAILED_SERVICES[*]}"
+    echo ""
+    echo "🔧 Troubleshooting options:"
+    echo "   1. View logs: docker compose -f compose-react.yaml logs [service-name]"
+    echo "   2. Try force rebuild: ./force-rebuild.sh"
+    echo "   3. Restart failed services: docker compose -f compose-react.yaml restart [service-name]"
+    echo ""
+    echo "🤔 Would you like to run force rebuild now? (y/N)"
+    read -r rebuild_response
+    if [[ "$rebuild_response" =~ ^[Yy]$ ]]; then
+        echo "🔥 Starting force rebuild..."
+        chmod +x force-rebuild.sh
+        exec ./force-rebuild.sh
+    fi
+fi
 
 echo ""
 echo "🌐 Service URLs:"
 echo "   • React Frontend: http://localhost:8080"
-echo "   • Backend API: http://localhost:8000"
+echo "   • Backend API: http://localhost:8000" 
 echo "   • Instructions: http://localhost:8001"
 echo "   • VS Code Server: http://localhost:8085 (password: password)"
 echo ""
 
-# Show logs for any failed services
-echo "📋 Recent logs (use 'docker compose -f compose-react.yaml logs -f' for live logs):"
-docker compose -f compose-react.yaml logs --tail=5
+# Show logs for any failed services or recent activity
+if [ ${#FAILED_SERVICES[@]} -gt 0 ]; then
+    echo "📋 Logs for failed services:"
+    for service in "${FAILED_SERVICES[@]}"; do
+        echo "--- $service ---"
+        docker compose -f compose-react.yaml logs --tail=5 "$service" 2>/dev/null || echo "No logs available"
+    done
+else
+    echo "📋 Recent logs (use 'docker compose -f compose-react.yaml logs -f' for live logs):"
+    docker compose -f compose-react.yaml logs --tail=3
+fi
 
 echo ""
-echo "✅ Workshop stack startup complete!"
-echo "   If you see any errors, check the logs with:"
-echo "   docker compose -f compose-react.yaml logs -f [service-name]"
+if [ ${#FAILED_SERVICES[@]} -eq 0 ] && [ ${#PORT_CONFLICTS[@]} -eq 0 ]; then
+    echo "✅ Workshop stack started successfully!"
+else
+    echo "⚠️  Workshop stack started with some issues."
+    echo "   💡 For a completely clean start, run: ./force-rebuild.sh"
+fi
+
+echo ""
+echo "📚 Available scripts:"
+echo "   • ./restart-workshop.sh - Smart restart (this script)"
+echo "   • ./force-rebuild.sh - Aggressive cleanup and rebuild"
+echo "   • docker compose -f compose-react.yaml logs -f - View live logs"
