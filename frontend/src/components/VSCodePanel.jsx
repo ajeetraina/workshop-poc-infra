@@ -10,7 +10,7 @@ const VSCodePanel = () => {
     // Check if VS Code is available
     const checkVSCode = async () => {
       try {
-        const response = await fetch('http://localhost:8085/favicon.ico');
+        const response = await fetch('http://localhost:8086/favicon.ico');
         if (response.ok) {
           setIsConnected(true);
         }
@@ -55,7 +55,7 @@ const VSCodePanel = () => {
       {isVSCodeLoaded ? (
         <iframe
           className="vscode-iframe"
-          src="http://localhost:8085"
+          src="http://localhost:8086"
           title="VS Code Server"
           onLoad={() => console.log('VS Code iframe loaded')}
           onError={() => console.log('Error loading VS Code iframe')}
@@ -76,7 +76,7 @@ const VSCodePanel = () => {
                 Load VS Code Here
               </button>
               <a 
-                href="http://localhost:8085" 
+                href="http://localhost:8086" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="access-button secondary"
