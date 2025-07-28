@@ -7,7 +7,7 @@ services:
     environment:
       PROJECT_CLONE_URL: https://github.com/mikesir87/workshop-poc-content
 
-  # React Frontend
+  # React Frontend  
   frontend:
     build: 
       context: ./frontend
@@ -24,7 +24,7 @@ services:
     environment:
       - NODE_ENV=production
     networks:
-      - workshop-poc-react
+      - default
 
   # Express Backend with swappable file system adapters
   backend:
@@ -50,7 +50,7 @@ services:
     labels:
       - demo-setup=true
     networks:
-      - workshop-poc-react
+      - default
 
   # Legacy instructions server (for backward compatibility)
   instructions:
@@ -68,9 +68,9 @@ services:
     labels:
       - demo-setup=true
     networks:
-      - workshop-poc-react
+      - default
 
-  # VS Code workspace - REMOVED from explicit network due to host-forwarding sharing
+  # VS Code workspace - Simplified network configuration
   workspace:
     image: michaelirwin244/workshop-poc:workspace
     command: /home/coder/project
@@ -79,7 +79,7 @@ services:
         condition: service_completed_successfully
     ports:
       - "8085:8085"
-      - "3000:3000"
+      - "3001:3000"  # Changed from 3000 to avoid conflict
     environment:
       TESTCONTAINERS_HOST_OVERRIDE: localhost
     volumes:
@@ -92,7 +92,7 @@ services:
           subpath: workspace
     labels:
       - demo-setup=true
-    # REMOVED networks section - inherits network through host-forwarding
+    # No explicit networks - will use default and share with host-forwarding
 
   # Host port forwarding - shares network namespace with workspace
   host-forwarding:
@@ -114,6 +114,7 @@ services:
     build:
       context: ./support/workspace-cleaner
       dockerfile: Dockerfile
+      no_cache: true  # Force no cache
     volumes:
       - socket-proxy:/var/run
     environment:
@@ -123,10 +124,10 @@ services:
     labels:
       - demo-setup=true
     networks:
-      - workshop-poc-react
+      - default
     restart: unless-stopped
 
-  # Socket proxy - Enhanced configuration for better stability
+  # Socket proxy - Updated network configuration
   socket-proxy:
     image: mikesir87/docker-socket-proxy
     volumes:
@@ -155,7 +156,7 @@ services:
 
           - type: addToNetwork
             networks:
-              - workshop-poc-react
+              - workshop-poc-infra_default
         gates:
           - type: mountSource
             allowedSources:
@@ -172,7 +173,7 @@ services:
     labels:
       - demo-setup=true
     networks:
-      - workshop-poc-react
+      - default
     restart: unless-stopped
 
 volumes:
@@ -185,9 +186,10 @@ volumes:
     labels:
       - demo-setup=true
 
+# Use default network with specific name to match socket-proxy configuration
 networks:
-  workshop-poc-react:
-    name: workshop-poc-react
+  default:
+    name: workshop-poc-infra_default
     labels:
       - demo-setup=true
 
