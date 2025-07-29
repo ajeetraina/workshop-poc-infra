@@ -1,29 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Monitor, ExternalLink } from 'lucide-react';
 import './VSCodePanel.css';
 
 const VSCodePanel = () => {
   const [isVSCodeLoaded, setIsVSCodeLoaded] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-
-  useEffect(() => {
-    // Check if VS Code is available
-    const checkVSCode = async () => {
-      try {
-        const response = await fetch('http://localhost:8086/favicon.ico');
-        if (response.ok) {
-          setIsConnected(true);
-        }
-      } catch (error) {
-        console.log('VS Code not ready yet, will try again...');
-        setTimeout(checkVSCode, 3000);
-      }
-    };
-
-    // Start checking after a brief delay
-    const timer = setTimeout(checkVSCode, 1000);
-    return () => clearTimeout(timer);
-  }, []);
+  // Skip CORS check - we know VS Code works via iframe
+  const isConnected = true;
 
   const embedVSCode = () => {
     setIsVSCodeLoaded(true);
@@ -50,12 +32,12 @@ const VSCodePanel = () => {
           </div>
         </div>
       </div>
-
+      
       {/* Content */}
       {isVSCodeLoaded ? (
         <iframe
           className="vscode-iframe"
-          src="http://localhost:8086"
+          src="http://localhost:8085"
           title="VS Code Server"
           onLoad={() => console.log('VS Code iframe loaded')}
           onError={() => console.log('Error loading VS Code iframe')}
@@ -67,31 +49,23 @@ const VSCodePanel = () => {
           <p>Your integrated development environment with terminal access</p>
           <p>Complete with file explorer, code editor, and Docker CLI</p>
           
-          {isConnected ? (
-            <div className="action-buttons">
-              <button 
-                onClick={embedVSCode} 
-                className="access-button primary"
-              >
-                Load VS Code Here
-              </button>
-              <a 
-                href="http://localhost:8086" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="access-button secondary"
-              >
-                <ExternalLink size={16} />
-                Open in New Tab
-              </a>
-            </div>
-          ) : (
-            <div className="loading-section">
-              <div className="loading-spinner"></div>
-              <p>Setting up your development environment...</p>
-              <p className="loading-tip">This may take a few moments on first run</p>
-            </div>
-          )}
+          <div className="action-buttons">
+            <button 
+              onClick={embedVSCode} 
+              className="access-button primary"
+            >
+              Load VS Code Here
+            </button>
+            <a 
+              href="http://localhost:8085" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="access-button secondary"
+            >
+              <ExternalLink size={16} />
+              Open in New Tab
+            </a>
+          </div>
         </div>
       )}
     </div>
