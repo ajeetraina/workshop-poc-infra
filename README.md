@@ -6,24 +6,27 @@ This is only a PoC that demonstrates how one might be able to launch a workshop 
 
 ## Architecture
 
-The project uses a combination of containers to create an isolated workshop environment with a modern React frontend and Express backend API.
+The project uses a combination of containers to create an isolated workshop environment with a modern React frontend and Express backend API, presented as a unified split-screen interface.
 
 ```mermaid
 flowchart TD
-    User[User] -->|:8080| Frontend
-    User -->|:8085| VSCode
-    User -->|:8001| Instructions
+    User[User] -->|http://localhost:8080| SplitScreen
 
-    subgraph "Web Application Layer"
-        Frontend[React Frontend<br/>Vite + nginx]
+    subgraph "Unified Interface"
+        SplitScreen[Split-Screen Interface<br/>React Frontend + VS Code Server]
+        SplitScreen --> Frontend[React Frontend<br/>Workshop UI]
+        SplitScreen --> VSCode[VS Code Server<br/>Development Environment]
+    end
+
+    subgraph "Backend Services"
         Backend[Express Backend<br/>API Server]
-        Instructions[Instructions<br/>Markdown Server]
+        Instructions[Instructions Server<br/>Markdown Content]
         
         Frontend -->|API calls| Backend
+        Frontend -->|Content requests| Instructions
     end
 
     subgraph "Development Environment"
-        VSCode[VS Code Server<br/>coder/code-server]
         project["/home/coder/project"]
         socket["/var/run/docker.sock"]
         
@@ -67,26 +70,30 @@ flowchart TD
 
 ### Component Overview
 
-**Web Application Layer:**
-- **React Frontend** (Port 8080) - Modern React application built with Vite, served by nginx. Provides the main user interface for the workshop.
-- **Express Backend** (Port 8000) - RESTful API server that handles file operations, workspace management, and communication with the development environment.
-- **Instructions Server** (Port 8001) - Legacy markdown rendering server for backward compatibility, renders workshop documentation.
+**Unified Interface:**
+- **Split-Screen Interface** (Port 8080) - Single entry point combining React frontend and VS Code Server in a unified workshop experience
+- **React Frontend** - Modern React application built with Vite, provides the workshop UI, instructions, and controls
+- **VS Code Server** - Integrated browser-based VS Code instance for live development within the same interface
+
+**Backend Services:**
+- **Express Backend** (Port 8000) - RESTful API server that handles file operations, workspace management, and communication between frontend and development environment
+- **Instructions Server** (Port 8001) - Markdown rendering server that provides workshop documentation content
 
 **Development Environment:**
-- **VS Code Server** (Port 8085) - Browser-based VS Code instance using [coder/code-server](https://github.com/coder/code-server) for live development.
-- **Host Port Forwarder** - Runs in the same network namespace as VS Code, enabling localhost port forwarding for applications started within the IDE.
+- **Host Port Forwarder** - Runs in the same network namespace as VS Code, enabling localhost port forwarding for applications started within the IDE
 
 **Infrastructure Layer:**
-- **Project Setup** - Initialization container that clones the workshop repository and sets up the workspace.
+- **Project Setup** - Initialization container that clones the workshop repository and sets up the workspace
 - **[Docker Socket Proxy](https://github.com/mikesir87/docker-socket-proxy)** - Security wrapper for the Docker Socket with protections and remapping:
   - Filters responses to only show workshop-created containers
   - Restricts mount sources to the project workspace
   - Remaps paths to use volumes instead of bind mounts
   - Ensures Testcontainers also uses the proxied socket
-- **Workspace Cleaner** - Resource management service for cleanup and maintenance.
+- **Workspace Cleaner** - Resource management service for cleanup and maintenance
 
 ### Key Features
 
+- **Unified Experience**: Single split-screen interface combining workshop content and development environment
 - **Modern Stack**: React frontend with Express backend API
 - **Isolated Environment**: Docker socket proxying ensures security and isolation
 - **Port Forwarding**: Localhost ports from VS Code are accessible to the frontend
@@ -114,19 +121,17 @@ To try it out, you'll first start off by launching the workshop environment. Aft
     docker compose up -d --build
     ```
 
-4. Access the services:
-   - **React Frontend**: http://localhost:8080 (Main workshop interface)
-   - **VS Code Server**: http://localhost:8085 (Development environment - password: `password`)
-   - **Instructions**: http://localhost:8001 (Legacy documentation)
-   - **Backend API**: http://localhost:8000 (REST API endpoints)
+4. Open http://localhost:8080 - This will open the unified split-screen interface with:
+   - **Left side**: Workshop instructions and controls
+   - **Right side**: VS Code development environment (password: `password`)
 
 ### Test out the workshop environment
 
-1. Open the React frontend at http://localhost:8080 to see the modern workshop interface
+1. Open http://localhost:8080 to access the unified workshop interface
 
-2. Open VS Code Server at http://localhost:8085 and enter the password `password`
+2. The split-screen will show instructions on the left and VS Code on the right. When prompted for the VS Code password, enter `password`
 
-3. In the VS Code terminal, run a `docker ps`. Notice how you see no other containers, even though there are other containers running on the machine (run the same `docker ps` in another terminal directly on your machine)!
+3. In the VS Code terminal (right side), run a `docker ps`. Notice how you see no other containers, even though there are other containers running on the machine (run the same `docker ps` in another terminal directly on your machine)!
 
 4. Start the application stack by launching Docker Compose:
 
@@ -202,3 +207,12 @@ The Express backend provides RESTful API endpoints for integration:
 - `POST /api/files` - Create/update files
 - `GET /api/workspace/status` - Get workspace status
 - Additional endpoints for workshop-specific functionality
+
+### Service URLs (for development/debugging)
+
+While the main experience is through the unified interface at port 8080, individual services can be accessed directly:
+
+- **Main Interface**: http://localhost:8080 (Unified split-screen workshop experience)
+- **Backend API**: http://localhost:8000 (Direct API access for debugging)
+- **Instructions**: http://localhost:8001 (Direct markdown server access)
+- **VS Code Server**: http://localhost:8085 (Direct VS Code access - mainly for debugging)
