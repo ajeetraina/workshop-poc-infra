@@ -59,13 +59,15 @@ To try it out, you'll first start off by launching the workshop environment. Aft
 
 1. Clone this project
 
-2. Start the stack using Docker Compose
+2. Copy .env.example to .env
+
+3. Start the stack using Docker Compose
 
     ```console
-    docker compose up -d
+    docker compose up -d --build
     ```
 
-3. Open http://localhost:8085. When you're prompted for the password, simply enter `password`.
+4. Open http://localhost:8085. It will open the split-screen interface with instructions on the left side and IDE on the right side. When you're prompted for the password on the right screen, simply enter `password`.
 
 
 ### Test out the workshop environment
