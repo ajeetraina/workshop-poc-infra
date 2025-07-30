@@ -10,75 +10,59 @@ The project uses a combination of containers to create an isolated workshop envi
 
 ```mermaid
 flowchart TD
-    User[👤 User] -->|http://localhost:8080| Frontend
-    User -->|http://localhost:8085| VSCode
-    User -->|http://localhost:8001| Instructions
+    User[User] -->|:8080| Frontend
+    User -->|:8085| VSCode
+    User -->|:8001| Instructions
 
     subgraph "Web Application Layer"
-        Frontend[🌐 React Frontend<br/>Vite + nginx<br/>:8080]
-        Backend[⚡ Express Backend<br/>API Server<br/>:8000]
-        Instructions[📚 Instructions<br/>Markdown Server<br/>:8001]
+        Frontend[React Frontend<br/>Vite + nginx]
+        Backend[Express Backend<br/>API Server]
+        Instructions[Instructions<br/>Markdown Server]
         
         Frontend -->|API calls| Backend
     end
 
     subgraph "Development Environment"
-        VSCode[💻 VS Code Server<br/>coder/code-server<br/>:8085]
-        project@{ shape: odd, label: "/home/coder/project" }
-        socket@{ shape: odd, label: "/var/run/docker.sock" }
+        VSCode[VS Code Server<br/>coder/code-server]
+        project["/home/coder/project"]
+        socket["/var/run/docker.sock"]
         
         subgraph "Port Forwarding"
-            localhostPorts[Localhost ports<br/>:3001]
+            localhostPorts[Localhost ports]
             socat[Socat processes]
             Forwarder[Host Port Forwarder]
         end
     end
 
     subgraph "Infrastructure Layer"
-        Setup[🔧 Project Setup<br/>Initialization]
-        ProxyContainer[🔒 Socket Proxy<br/>Security & Isolation]
-        WorkspaceCleaner[🧹 Workspace Cleaner<br/>Resource Management]
+        Setup[Project Setup<br/>Initialization]
+        ProxyContainer[Socket Proxy<br/>Security & Isolation]
+        WorkspaceCleaner[Workspace Cleaner<br/>Resource Management]
     end
 
     subgraph "Storage"
-        Volume@{ shape: cyl, label: "project\nvolume" }
-        SocketVolume@{ shape: cyl, label: "socket-proxy\nvolume" }
+        Volume[(project volume)]
+        SocketVolume[(socket-proxy volume)]
     end
 
-    %% Setup and Volume relationships
     Setup -->|Clones workshop repo| Volume
     Volume -->|Shared workspace| project
     Volume -->|Content source| Backend
     Volume -->|Docs content| Instructions
 
-    %% Backend connections
     Backend -->|File operations| Volume
     Backend -->|Container management| socket
     Backend -->|Workspace interaction| VSCode
 
-    %% VS Code and Port Forwarding
     VSCode -->|Shares network namespace| Forwarder
     Forwarder -->|Port discovery| socat
     socat <-->|localhost forwarding| localhostPorts
 
-    %% Socket Proxy
     ProxyContainer -->|Secure Docker API| SocketVolume
     SocketVolume -->|Mounted proxy| socket
     SocketVolume -->|Security layer| Forwarder
 
-    %% Workspace Management
     WorkspaceCleaner -->|Resource cleanup| SocketVolume
-
-    %% Styling
-    classDef webLayer fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    classDef devLayer fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    classDef infraLayer fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
-    classDef storage fill:#fff3e0,stroke:#e65100,stroke-width:2px
-
-    class Frontend,Backend,Instructions webLayer
-    class VSCode,project,socket,localhostPorts,socat,Forwarder devLayer
-    class Setup,ProxyContainer,WorkspaceCleaner infraLayer
-    class Volume,SocketVolume storage
 ```
 
 ### Component Overview
