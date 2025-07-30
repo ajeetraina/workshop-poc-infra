@@ -9,59 +9,17 @@ This is only a PoC that demonstrates how one might be able to launch a workshop 
 The project uses a combination of containers to create an isolated workshop environment with a modern React frontend and Express backend API, presented as a unified split-screen interface.
 
 ```mermaid
-flowchart TD
-    User[User] -->|http://localhost:8080| SplitScreen[Split-Screen Interface]
-
-    subgraph "Unified Interface"
-        SplitScreen --> Frontend[React Frontend]
-        SplitScreen --> VSCode[VS Code Server]
-    end
-
-    subgraph "Backend Services"
-        Backend[Express Backend]
-        Instructions[Instructions Server]
-        
-        Frontend --> Backend
-        Frontend --> Instructions
-    end
-
-    subgraph "Development Environment"
-        VSCode --> project["/home/coder/project"]
-        VSCode --> socket["/var/run/docker.sock"]
-        
-        Forwarder[Host Port Forwarder]
-        socat[Socat processes]
-        localhostPorts[Localhost ports]
-        
-        VSCode --> Forwarder
-        Forwarder --> socat
-        socat --> localhostPorts
-    end
-
-    subgraph "Infrastructure Layer"
-        Setup[Project Setup]
-        ProxyContainer[Socket Proxy]
-        WorkspaceCleaner[Workspace Cleaner]
-    end
-
-    subgraph "Storage"
-        Volume[(project volume)]
-        SocketVolume[(socket-proxy volume)]
-    end
-
-    Setup --> Volume
-    Volume --> project
-    Volume --> Backend
-    Volume --> Instructions
-
-    Backend --> Volume
-    Backend --> socket
-
-    ProxyContainer --> SocketVolume
-    SocketVolume --> socket
-    SocketVolume --> Forwarder
-
-    WorkspaceCleaner --> SocketVolume
+graph TD
+    A[User] --> B[Split-Screen Interface]
+    B --> C[React Frontend]
+    B --> D[VS Code Server]
+    C --> E[Express Backend]
+    C --> F[Instructions Server]
+    D --> G[Project Files]
+    D --> H[Docker Socket]
+    E --> G
+    I[Project Setup] --> G
+    J[Socket Proxy] --> H
 ```
 
 ### Component Overview
