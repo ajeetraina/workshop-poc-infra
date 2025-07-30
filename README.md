@@ -10,37 +10,38 @@ The project uses a combination of containers to create an isolated workshop envi
 
 ```mermaid
 flowchart TD
-    User[User] -->|http://localhost:8080| SplitScreen
+    User[User] -->|http://localhost:8080| SplitScreen[Split-Screen Interface]
 
     subgraph "Unified Interface"
-        SplitScreen[Split-Screen Interface<br/>React Frontend + VS Code Server]
-        SplitScreen --> Frontend[React Frontend<br/>Workshop UI]
-        SplitScreen --> VSCode[VS Code Server<br/>Development Environment]
+        SplitScreen --> Frontend[React Frontend]
+        SplitScreen --> VSCode[VS Code Server]
     end
 
     subgraph "Backend Services"
-        Backend[Express Backend<br/>API Server]
-        Instructions[Instructions Server<br/>Markdown Content]
+        Backend[Express Backend]
+        Instructions[Instructions Server]
         
-        Frontend -->|API calls| Backend
-        Frontend -->|Content requests| Instructions
+        Frontend --> Backend
+        Frontend --> Instructions
     end
 
     subgraph "Development Environment"
-        project["/home/coder/project"]
-        socket["/var/run/docker.sock"]
+        VSCode --> project["/home/coder/project"]
+        VSCode --> socket["/var/run/docker.sock"]
         
-        subgraph "Port Forwarding"
-            localhostPorts[Localhost ports]
-            socat[Socat processes]
-            Forwarder[Host Port Forwarder]
-        end
+        Forwarder[Host Port Forwarder]
+        socat[Socat processes]
+        localhostPorts[Localhost ports]
+        
+        VSCode --> Forwarder
+        Forwarder --> socat
+        socat --> localhostPorts
     end
 
     subgraph "Infrastructure Layer"
-        Setup[Project Setup<br/>Initialization]
-        ProxyContainer[Socket Proxy<br/>Security & Isolation]
-        WorkspaceCleaner[Workspace Cleaner<br/>Resource Management]
+        Setup[Project Setup]
+        ProxyContainer[Socket Proxy]
+        WorkspaceCleaner[Workspace Cleaner]
     end
 
     subgraph "Storage"
@@ -48,24 +49,19 @@ flowchart TD
         SocketVolume[(socket-proxy volume)]
     end
 
-    Setup -->|Clones workshop repo| Volume
-    Volume -->|Shared workspace| project
-    Volume -->|Content source| Backend
-    Volume -->|Docs content| Instructions
+    Setup --> Volume
+    Volume --> project
+    Volume --> Backend
+    Volume --> Instructions
 
-    Backend -->|File operations| Volume
-    Backend -->|Container management| socket
-    Backend -->|Workspace interaction| VSCode
+    Backend --> Volume
+    Backend --> socket
 
-    VSCode -->|Shares network namespace| Forwarder
-    Forwarder -->|Port discovery| socat
-    socat <-->|localhost forwarding| localhostPorts
+    ProxyContainer --> SocketVolume
+    SocketVolume --> socket
+    SocketVolume --> Forwarder
 
-    ProxyContainer -->|Secure Docker API| SocketVolume
-    SocketVolume -->|Mounted proxy| socket
-    SocketVolume -->|Security layer| Forwarder
-
-    WorkspaceCleaner -->|Resource cleanup| SocketVolume
+    WorkspaceCleaner --> SocketVolume
 ```
 
 ### Component Overview
