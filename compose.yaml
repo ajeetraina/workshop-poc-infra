@@ -1,4 +1,5 @@
 services:
+  # Project setup (unchanged)
   project-setup:
     image: michaelirwin244/workshop-poc:setup
     volumes:
@@ -6,25 +7,58 @@ services:
     environment:
       PROJECT_CLONE_URL: https://github.com/mikesir87/workshop-poc-content
 
-  lab-interface:
-    image: nginx:alpine
-    container_name: lab-interface
+  # React Frontend  
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: react-frontend
     ports:
       - "8080:80"
-    volumes:
-      - ./lab-interface:/usr/share/nginx/html:ro
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - workspace
-      - instructions
+      workspace:
+        condition: service_healthy  # Wait for workspace to be healthy
+      backend:
+        condition: service_started
     restart: unless-stopped
     labels:
       - demo-setup=true
+    environment:
+      - NODE_ENV=production
+    networks:
+      - default
 
+  # Express Backend with swappable file system adapters
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: express-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - project:/project
+      - socket-proxy:/var/run
+      - /var/run/docker.sock:/var/run/docker.sock  # For container adapter
+    environment:
+      - NODE_ENV=production
+      - WORKSPACE_ROOT=/project/workspace
+      - TARGET_CONTAINER=workspace
+      - CONTENT_DIR=/project/docs
+    depends_on:
+      project-setup:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    labels:
+      - demo-setup=true
+    networks:
+      - default
+
+  # Legacy instructions server (for backward compatibility)
   instructions:
     image: michaelirwin244/workshop-poc:markdown-server
     ports:
-      - 8000:3000
+      - "8001:3000"
     volumes:
       - project:/project
     environment:
@@ -33,16 +67,23 @@ services:
     depends_on:
       project-setup:
         condition: service_completed_successfully
+    labels:
+      - demo-setup=true
+    networks:
+      - default
 
+  # VS Code workspace - Add health check and start independently
   workspace:
     image: michaelirwin244/workshop-poc:workspace
     command: /home/coder/project
     depends_on:
       project-setup:
         condition: service_completed_successfully
+      socket-proxy:
+        condition: service_started
     ports:
-      - 8085:8085 # For the IDE itself
-      - 3000:3000 # For the application running in the IDE
+      - "8085:8085"
+      - "3001:3000"  # Changed from 3000 to avoid conflict
     environment:
       TESTCONTAINERS_HOST_OVERRIDE: localhost
     volumes:
@@ -53,31 +94,62 @@ services:
         volume:
           nocopy: true
           subpath: workspace
+    labels:
+      - demo-setup=true
+    # Add health check to ensure VS Code is ready before other services depend on it
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/healthz", "||", "curl", "-f", "http://localhost:8085"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - default
 
+  # Host port forwarding - Start AFTER workspace is healthy and use different network approach
   host-forwarding:
     image: michaelirwin244/workshop-poc:host-port-republisher
     volumes:
       - socket-proxy:/var/run
-    network_mode: service:workspace
+    # Remove network_mode to avoid conflicts - use port mapping instead
     environment:
       LABEL_FILTER: demo-setup=true
+      # Add environment variable to connect to workspace container by name
+      WORKSPACE_CONTAINER_NAME: workspace-1
     depends_on:
-      - workspace
-      - socket-proxy
+      workspace:
+        condition: service_healthy  # Wait for workspace to be fully ready
+      socket-proxy:
+        condition: service_started
+    labels:
+      - demo-setup=true
+    restart: unless-stopped
+    networks:
+      - default
 
+  # Workspace cleaner - FORCE REBUILD to get package.json fix
   workspace-cleaner:
-    image: michaelirwin244/workshop-poc:workspace-cleaner
+    build:
+      context: ./support/workspace-cleaner
+      dockerfile: Dockerfile
+      no_cache: true  # Force no cache
     volumes:
       - socket-proxy:/var/run
     environment:
       LABEL_FILTER: demo-setup=true
     depends_on:
-      - socket-proxy
+      socket-proxy:
+        condition: service_started
+    labels:
+      - demo-setup=true
+    networks:
+      - default
+    restart: unless-stopped
 
+  # Socket proxy - Updated network configuration
   socket-proxy:
     image: mikesir87/docker-socket-proxy
-    # image: socket-proxy
-    # use_api_socket: true
     volumes:
       - socket-proxy:/tmp/proxy
       - /var/run/docker.sock:/var/run/docker.sock
@@ -104,7 +176,7 @@ services:
 
           - type: addToNetwork
             networks:
-              - workshop-poc
+              - workshop-poc-infra_default
         gates:
           - type: mountSource
             allowedSources:
@@ -118,18 +190,25 @@ services:
             requiredLabels:
               demo-setup: "true"
       LISTEN_SOCKET_PATH: /tmp/proxy/docker.sock
-    # pre_stop:
-    #   - command: docker rm -f $(docker ps -aq --filter "label=demo-setup=true") || true
-    #   - command: docker volume rm -f $(docker volume ls -q --filter "label=demo-setup=true") || true
-    #   - command: docker network rm -f $(docker network ls -q --filter "label=demo-setup=true") || true
+    labels:
+      - demo-setup=true
+    networks:
+      - default
+    restart: unless-stopped
 
 volumes:
   socket-proxy:
     name: socket-proxy
+    labels:
+      - demo-setup=true
   project:
     name: project
+    labels:
+      - demo-setup=true
 
+# Use default network with specific name to match socket-proxy configuration
 networks:
-  workshop-poc:
-    name: workshop-poc
-
+  default:
+    name: workshop-poc-infra_default
+    labels:
+      - demo-setup=true
