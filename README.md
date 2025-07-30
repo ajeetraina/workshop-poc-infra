@@ -6,45 +6,108 @@ This is only a PoC that demonstrates how one might be able to launch a workshop 
 
 ## Architecture
 
-The project uses a combination of containers to create an isolated environment.
+The project uses a combination of containers to create an isolated workshop environment with a modern React frontend and Express backend API.
 
 ```mermaid
 flowchart TD
-    subgraph VS Code Server
+    User[👤 User] -->|http://localhost:8080| Frontend
+    User -->|http://localhost:8085| VSCode
+    User -->|http://localhost:8001| Instructions
+
+    subgraph "Web Application Layer"
+        Frontend[🌐 React Frontend<br/>Vite + nginx<br/>:8080]
+        Backend[⚡ Express Backend<br/>API Server<br/>:8000]
+        Instructions[📚 Instructions<br/>Markdown Server<br/>:8001]
+        
+        Frontend -->|API calls| Backend
+    end
+
+    subgraph "Development Environment"
+        VSCode[💻 VS Code Server<br/>coder/code-server<br/>:8085]
         project@{ shape: odd, label: "/home/coder/project" }
         socket@{ shape: odd, label: "/var/run/docker.sock" }
-        localhostPorts[Localhost ports]
-
-        subgraph Shared Network Namespace
-            localhostPorts["Localhost ports"]
-            socat["Socat processes"]
-            Forwarder[Port forwarder]
+        
+        subgraph "Port Forwarding"
+            localhostPorts[Localhost ports<br/>:3001]
+            socat[Socat processes]
+            Forwarder[Host Port Forwarder]
         end
     end
 
-    Setup[Project setup] -->|Clones and populates workshop repo| Volume@{ shape: cyl, label: "project\nvolume" }
-    Volume --> project
+    subgraph "Infrastructure Layer"
+        Setup[🔧 Project Setup<br/>Initialization]
+        ProxyContainer[🔒 Socket Proxy<br/>Security & Isolation]
+        WorkspaceCleaner[🧹 Workspace Cleaner<br/>Resource Management]
+    end
 
-    Volume --> Instructions[Workshop instructions]
+    subgraph "Storage"
+        Volume@{ shape: cyl, label: "project\nvolume" }
+        SocketVolume@{ shape: cyl, label: "socket-proxy\nvolume" }
+    end
 
-    SocketVolume -->|Mounted into| Forwarder
-    Forwarder -->|Listens for published ports and starts|socat
-    socat <--> |Can connect to published ports via localhost| localhostPorts
+    %% Setup and Volume relationships
+    Setup -->|Clones workshop repo| Volume
+    Volume -->|Shared workspace| project
+    Volume -->|Content source| Backend
+    Volume -->|Docs content| Instructions
 
-    ProxyContainer[Socket Proxy] -->|Creates Docker API proxy and mutator| SocketVolume@{ shape: cyl, label: "Docker socket\nvolume" }
-    SocketVolume -->|Mounted at| socket
+    %% Backend connections
+    Backend -->|File operations| Volume
+    Backend -->|Container management| socket
+    Backend -->|Workspace interaction| VSCode
+
+    %% VS Code and Port Forwarding
+    VSCode -->|Shares network namespace| Forwarder
+    Forwarder -->|Port discovery| socat
+    socat <-->|localhost forwarding| localhostPorts
+
+    %% Socket Proxy
+    ProxyContainer -->|Secure Docker API| SocketVolume
+    SocketVolume -->|Mounted proxy| socket
+    SocketVolume -->|Security layer| Forwarder
+
+    %% Workspace Management
+    WorkspaceCleaner -->|Resource cleanup| SocketVolume
+
+    %% Styling
+    classDef webLayer fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef devLayer fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef infraLayer fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef storage fill:#fff3e0,stroke:#e65100,stroke-width:2px
+
+    class Frontend,Backend,Instructions webLayer
+    class VSCode,project,socket,localhostPorts,socat,Forwarder devLayer
+    class Setup,ProxyContainer,WorkspaceCleaner infraLayer
+    class Volume,SocketVolume storage
 ```
 
-- **VS Code Server** - utilizes the [coder/code-server](https://github.com/coder/code-server) project to provide VS Code in a browser
-- **Setup container** - clones the repo and puts it into a volume that is then shared with the VS Code server.
-- **[Docker Socket Proxy](https://github.com/mikesir87/docker-socket-proxy)** - wraps the Docker Socket to put various protections/remappings in place. Specifically:
-  - Docker commands will only return the items created by this environment (newly created items are mutated with a label and object responses filter on that label)
-  - Mounts in new containers are only allowed from within the project
-  - Mount source paths are remapped to the volume the files are found in (even if using relative paths)
-  - Requests to start a new container with the Docker socket will be remapped to use the proxied socket. This ensures Testcontainers config also uses the remapping, etc.
-- **Host Port Forwarder** - this container runs in the same network namespace as the VS Code Server and watches for container start/stop events that have published ports. It then starts socat processes to allow the forwarding of localhost ports to the container.
-    - Example: start a postgres container in the IDE terminal, publishing the port. With this, you can then connect to it using `psql -h localhost` without using host network mode (which isn't always available)
-- **Instructions** - a small markdown rendering server that renders the contents of the `docs` directory within a workshop repo
+### Component Overview
+
+**Web Application Layer:**
+- **React Frontend** (Port 8080) - Modern React application built with Vite, served by nginx. Provides the main user interface for the workshop.
+- **Express Backend** (Port 8000) - RESTful API server that handles file operations, workspace management, and communication with the development environment.
+- **Instructions Server** (Port 8001) - Legacy markdown rendering server for backward compatibility, renders workshop documentation.
+
+**Development Environment:**
+- **VS Code Server** (Port 8085) - Browser-based VS Code instance using [coder/code-server](https://github.com/coder/code-server) for live development.
+- **Host Port Forwarder** - Runs in the same network namespace as VS Code, enabling localhost port forwarding for applications started within the IDE.
+
+**Infrastructure Layer:**
+- **Project Setup** - Initialization container that clones the workshop repository and sets up the workspace.
+- **[Docker Socket Proxy](https://github.com/mikesir87/docker-socket-proxy)** - Security wrapper for the Docker Socket with protections and remapping:
+  - Filters responses to only show workshop-created containers
+  - Restricts mount sources to the project workspace
+  - Remaps paths to use volumes instead of bind mounts
+  - Ensures Testcontainers also uses the proxied socket
+- **Workspace Cleaner** - Resource management service for cleanup and maintenance.
+
+### Key Features
+
+- **Modern Stack**: React frontend with Express backend API
+- **Isolated Environment**: Docker socket proxying ensures security and isolation
+- **Port Forwarding**: Localhost ports from VS Code are accessible to the frontend
+- **Volume Remapping**: File paths are automatically remapped to secure volumes
+- **Live Development**: Real-time interaction between web interface and VS Code workspace
 
 ## Known limitations
 
@@ -67,16 +130,21 @@ To try it out, you'll first start off by launching the workshop environment. Aft
     docker compose up -d --build
     ```
 
-4. Open http://localhost:8085. It will open the split-screen interface with instructions on the left side and IDE on the right side. When you're prompted for the password on the right screen, simply enter `password`.
-
+4. Access the services:
+   - **React Frontend**: http://localhost:8080 (Main workshop interface)
+   - **VS Code Server**: http://localhost:8085 (Development environment - password: `password`)
+   - **Instructions**: http://localhost:8001 (Legacy documentation)
+   - **Backend API**: http://localhost:8000 (REST API endpoints)
 
 ### Test out the workshop environment
 
-1. Once you're in VS Code, open a terminal (Menu -> Terminal -> New Terminal)
+1. Open the React frontend at http://localhost:8080 to see the modern workshop interface
 
-2. In the terminal, run a `docker ps`. Notice how you see no other containers, even though there are other containers running on the machine (run the same `docker ps` in another terminal directly on your machine)!
+2. Open VS Code Server at http://localhost:8085 and enter the password `password`
 
-3. Start the application stack by launching Docker Compose:
+3. In the VS Code terminal, run a `docker ps`. Notice how you see no other containers, even though there are other containers running on the machine (run the same `docker ps` in another terminal directly on your machine)!
+
+4. Start the application stack by launching Docker Compose:
 
     ```console
     docker compose up -d
@@ -84,9 +152,9 @@ To try it out, you'll first start off by launching the workshop environment. Aft
 
     You'll see all of the containers start up successfully!
 
-4. Run another `docker ps` and you'll see the containers you started!
+5. Run another `docker ps` and you'll see the containers you started!
 
-5. Try out Testcontainers by running the following command:
+6. Try out Testcontainers by running the following command:
 
     ```console
     npm run integration-test
@@ -140,3 +208,13 @@ To try it out, you'll first start off by launching the workshop environment. Aft
     ```
 
     The socket is coming from the Docker Socket proxy... meaning this nested container is _also_ being proxied!
+
+### API Endpoints
+
+The Express backend provides RESTful API endpoints for integration:
+
+- `GET /api/health` - Health check endpoint
+- `GET /api/files` - List workspace files
+- `POST /api/files` - Create/update files
+- `GET /api/workspace/status` - Get workspace status
+- Additional endpoints for workshop-specific functionality
