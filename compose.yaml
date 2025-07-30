@@ -16,8 +16,10 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - backend
-      - workspace
+      workspace:
+        condition: service_healthy  # Wait for workspace to be healthy
+      backend:
+        condition: service_started
     restart: unless-stopped
     labels:
       - demo-setup=true
@@ -70,13 +72,15 @@ services:
     networks:
       - default
 
-  # VS Code workspace - Simplified network configuration
+  # VS Code workspace - Add health check and start independently
   workspace:
     image: michaelirwin244/workshop-poc:workspace
     command: /home/coder/project
     depends_on:
       project-setup:
         condition: service_completed_successfully
+      socket-proxy:
+        condition: service_started
     ports:
       - "8085:8085"
       - "3001:3000"  # Changed from 3000 to avoid conflict
@@ -92,22 +96,37 @@ services:
           subpath: workspace
     labels:
       - demo-setup=true
-    # No explicit networks - will use default and share with host-forwarding
+    # Add health check to ensure VS Code is ready before other services depend on it
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/healthz", "||", "curl", "-f", "http://localhost:8085"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - default
 
-  # Host port forwarding - shares network namespace with workspace
+  # Host port forwarding - Start AFTER workspace is healthy and use different network approach
   host-forwarding:
     image: michaelirwin244/workshop-poc:host-port-republisher
     volumes:
       - socket-proxy:/var/run
-    network_mode: service:workspace
+    # Remove network_mode to avoid conflicts - use port mapping instead
     environment:
       LABEL_FILTER: demo-setup=true
+      # Add environment variable to connect to workspace container by name
+      WORKSPACE_CONTAINER_NAME: workspace-1
     depends_on:
-      - workspace
-      - socket-proxy
+      workspace:
+        condition: service_healthy  # Wait for workspace to be fully ready
+      socket-proxy:
+        condition: service_started
     labels:
       - demo-setup=true
     restart: unless-stopped
+    networks:
+      - default
 
   # Workspace cleaner - FORCE REBUILD to get package.json fix
   workspace-cleaner:
@@ -120,7 +139,8 @@ services:
     environment:
       LABEL_FILTER: demo-setup=true
     depends_on:
-      - socket-proxy
+      socket-proxy:
+        condition: service_started
     labels:
       - demo-setup=true
     networks:
