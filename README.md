@@ -8,18 +8,29 @@ This is only a PoC that demonstrates how one might be able to launch a workshop 
 
 The project uses a combination of containers to create an isolated workshop environment with a modern React frontend and Express backend API, presented as a unified split-screen interface.
 
-```mermaid
-graph TD
-    A[User] --> B[Split-Screen Interface]
-    B --> C[React Frontend]
-    B --> D[VS Code Server]
-    C --> E[Express Backend]
-    C --> F[Instructions Server]
-    D --> G[Project Files]
-    D --> H[Docker Socket]
-    E --> G
-    I[Project Setup] --> G
-    J[Socket Proxy] --> H
+### Architecture Flow
+
+```
+User (Browser)
+    ↓
+http://localhost:8080
+    ↓
+Split-Screen Interface
+    ├── Left Side: React Frontend (Workshop UI, Instructions, Controls)
+    └── Right Side: VS Code Server (Development Environment)
+    
+React Frontend communicates with:
+    ├── Express Backend (API Server) → Project Files & Docker Socket
+    └── Instructions Server (Markdown Content)
+
+Backend Infrastructure:
+    ├── Project Setup → Clones workshop repository
+    ├── Socket Proxy → Secures Docker API access  
+    └── Workspace Cleaner → Resource management
+    
+Storage:
+    ├── Project Volume → Shared workspace files
+    └── Socket-Proxy Volume → Secure Docker socket
 ```
 
 ### Component Overview
